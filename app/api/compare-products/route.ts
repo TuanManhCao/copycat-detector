@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { extractProductInfo } from '@/lib/ai-utils';
+import { calculateArrayEmbeddingSimilarity, calculateEmbeddingSimilarity, calculateVariantsEmbeddingSimilarity, extractProductInfo } from '@/lib/ai-utils';
 import { scrapeUrl } from '@/lib/firecrawl';
-import { ProductInfo } from '@/lib/types';
 
 // Request schema for product comparison
 const RequestSchema = z.object({
@@ -10,52 +9,7 @@ const RequestSchema = z.object({
   targetUrl: z.string().url('Target URL must be a valid URL'),
 });
 
-// Calculate similarity score between two strings (0-100)
-function calculateSimilarity(str1: string, str2: string): number {
-  if (!str1 && !str2) return 100; // Both empty = perfect match
-  if (!str1 || !str2) return 0;   // One empty = no match
-
-  // Convert to lowercase for better comparison
-  const s1 = str1.toLowerCase();
-  const s2 = str2.toLowerCase();
-
-  // Simple Jaccard similarity for a basic measure
-  const set1 = new Set(s1.split(/\s+/));
-  const set2 = new Set(s2.split(/\s+/));
-  
-  const intersection = new Set([...set1].filter(x => set2.has(x)));
-  const union = new Set([...set1, ...set2]);
-  
-  return Math.round((intersection.size / union.size) * 100);
-}
-
-// Calculate similarity between arrays (like features)
-function calculateArraySimilarity(arr1: string[], arr2: string[]): number {
-  if (arr1.length === 0 && arr2.length === 0) return 100;
-  if (arr1.length === 0 || arr2.length === 0) return 0;
-  
-  // Join arrays to strings for comparison
-  const str1 = arr1.join(' ');
-  const str2 = arr2.join(' ');
-  
-  return calculateSimilarity(str1, str2);
-}
-
-// Calculate similarity between product variants
-function calculateVariantsSimilarity(
-  variants1: ProductInfo['productVariants'] = [], 
-  variants2: ProductInfo['productVariants'] = []
-): number {
-  if (!variants1?.length && !variants2?.length) return 100;
-  if (!variants1?.length || !variants2?.length) return 0;
-  
-  // Convert variants to strings for comparison
-  const str1 = variants1.map(v => `${v.name || ''} ${v.options?.join(' ') || ''} ${v.price || ''}`).join(' ');
-  const str2 = variants2.map(v => `${v.name || ''} ${v.options?.join(' ') || ''} ${v.price || ''}`).join(' ');
-  
-  return calculateSimilarity(str1, str2);
-}
-
+// Calculate similarity score using embeddings and cosine similarity
 export async function POST(request: NextRequest) {
   try {
     // Parse request body
@@ -82,31 +36,43 @@ export async function POST(request: NextRequest) {
       extractProductInfo(targetMarkdown)
     ]);
     
-    // Calculate similarity scores for each feature
-    const comparisonResult = [
+    // Calculate similarity scores for each feature using embeddings
+    const comparisonResult = await Promise.all([
       {
         element: "Product Title",
         sourceContent: sourceProduct.productTitle,
         targetContent: targetProduct.productTitle,
-        similarityScore: calculateSimilarity(sourceProduct.productTitle, targetProduct.productTitle),
+        similarityScore: await calculateEmbeddingSimilarity(
+          sourceProduct.productTitle, 
+          targetProduct.productTitle
+        ),
       },
       {
         element: "Description",
         sourceContent: sourceProduct.description,
         targetContent: targetProduct.description,
-        similarityScore: calculateSimilarity(sourceProduct.description, targetProduct.description),
+        similarityScore: await calculateEmbeddingSimilarity(
+          sourceProduct.description, 
+          targetProduct.description
+        ),
       },
       {
         element: "Price",
         sourceContent: sourceProduct.price,
         targetContent: targetProduct.price,
-        similarityScore: calculateSimilarity(sourceProduct.price, targetProduct.price),
+        similarityScore: await calculateEmbeddingSimilarity(
+          sourceProduct.price, 
+          targetProduct.price
+        ),
       },
       {
         element: "Features",
         sourceContent: sourceProduct.features.join('\n'),
         targetContent: targetProduct.features.join('\n'),
-        similarityScore: calculateArraySimilarity(sourceProduct.features, targetProduct.features),
+        similarityScore: await calculateArrayEmbeddingSimilarity(
+          sourceProduct.features, 
+          targetProduct.features
+        ),
       },
       {
         element: "Variants",
@@ -120,15 +86,21 @@ export async function POST(request: NextRequest) {
               `${v.name || ''}: ${v.options?.join(', ') || ''} ${v.price ? `(${v.price})` : ''}`
             ).join('\n')
           : '',
-        similarityScore: calculateVariantsSimilarity(sourceProduct.productVariants, targetProduct.productVariants),
+        similarityScore: await calculateVariantsEmbeddingSimilarity(
+          sourceProduct.productVariants, 
+          targetProduct.productVariants
+        ),
       },
       {
         element: "Warranty",
         sourceContent: sourceProduct.warranty || '',
         targetContent: targetProduct.warranty || '',
-        similarityScore: calculateSimilarity(sourceProduct.warranty || '', targetProduct.warranty || ''),
+        similarityScore: await calculateEmbeddingSimilarity(
+          sourceProduct.warranty || '', 
+          targetProduct.warranty || ''
+        ),
       },
-    ];
+    ]);
     
     // Calculate overall similarity score (average of all scores)
     const overallScore = Math.round(
