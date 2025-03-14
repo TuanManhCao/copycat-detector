@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { scrapeUrl, crawlWebsite, mapWebsite } from '@/lib/firecrawl';
 
+
 /**
  * API handler for scraping a single URL
  */

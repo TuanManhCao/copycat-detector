@@ -11,6 +11,24 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 
+interface ComparisonItem {
+  element: string
+  sourceContent: string
+  targetContent: string
+  similarityScore: number
+}
+
+interface ComparisonResponse {
+  success: boolean
+  sourceUrl: string
+  targetUrl: string
+  overallSimilarityScore: number
+  comparison: ComparisonItem[]
+  sourceProduct: any
+  targetProduct: any
+  error?: string
+}
+
 export default function TextSimilarityPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -18,27 +36,47 @@ export default function TextSimilarityPage() {
   const targetUrl = searchParams.get("target") || ""
 
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [comparisonData, setComparisonData] = useState<ComparisonItem[]>([])
+  const [overallScore, setOverallScore] = useState(0)
 
-  // Simulate loading and generating comparison data
   useEffect(() => {
     if (!sourceUrl || !targetUrl) {
       router.push("/")
       return
     }
 
-    const timer = setTimeout(() => {
-      setComparisonData(generateMockComparisonData())
-      setLoading(false)
-    }, 1500)
+    async function fetchComparison() {
+      try {
+        const response = await fetch("/api/compare-products", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            sourceUrl,
+            targetUrl,
+          }),
+        })
 
-    return () => clearTimeout(timer)
+        const data: ComparisonResponse = await response.json()
+
+        if (!data.success) {
+          throw new Error(data.error || "Failed to compare products")
+        }
+
+        setComparisonData(data.comparison)
+        setOverallScore(data.overallSimilarityScore)
+        setError(null)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "An error occurred")
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchComparison()
   }, [sourceUrl, targetUrl, router])
-
-  const getOverallSimilarity = () => {
-    if (comparisonData.length === 0) return 0
-    return Math.round(comparisonData.reduce((sum, item) => sum + item.similarityScore, 0) / comparisonData.length)
-  }
 
   const getSimilarityColor = (score: number) => {
     if (score > 80) return "text-red-500"
@@ -92,6 +130,14 @@ export default function TextSimilarityPage() {
           </CardContent>
         </Card>
       </div>
+
+      {error && (
+        <Card className="mb-8 bg-red-50">
+          <CardContent className="pt-6">
+            <p className="text-red-600">{error}</p>
+          </CardContent>
+        </Card>
+      )}
 
       {loading ? (
         <>
@@ -164,17 +210,17 @@ export default function TextSimilarityPage() {
             <CardHeader>
               <CardTitle className="flex items-center justify-between">
                 <span>Overall Text Similarity</span>
-                <Badge className={getSimilarityBadge(getOverallSimilarity())}>{getOverallSimilarity()}% Match</Badge>
+                <Badge className={getSimilarityBadge(overallScore)}>{overallScore}% Match</Badge>
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                <Progress value={getOverallSimilarity()} className="h-2.5" />
+                <Progress value={overallScore} className="h-2.5" />
 
                 <p className="text-sm text-muted-foreground">
-                  {getOverallSimilarity() > 80
+                  {overallScore > 80
                     ? "These products have highly similar text content. This level of similarity suggests potential copying or close imitation."
-                    : getOverallSimilarity() > 60
+                    : overallScore > 60
                       ? "These products show moderate text similarity. Some elements appear to be similar, but there are also notable differences."
                       : "These products show low text similarity. The text content appears to be distinct with minimal overlap."}
                 </p>
@@ -242,57 +288,3 @@ export default function TextSimilarityPage() {
     </main>
   )
 }
-
-interface ComparisonItem {
-  element: string
-  sourceContent: string
-  targetContent: string
-  similarityScore: number
-}
-
-// Mock data generator
-function generateMockComparisonData(): ComparisonItem[] {
-  return [
-    {
-      element: "Product Title",
-      sourceContent: "Premium Wireless Noise-Cancelling Headphones - Black",
-      targetContent: "Deluxe Wireless Headphones with Noise Cancellation - Black",
-      similarityScore: 87,
-    },
-    {
-      element: "Description",
-      sourceContent:
-        "Experience immersive sound with our premium wireless headphones. Featuring advanced noise-cancelling technology, these headphones block out ambient noise so you can focus on your music. With up to 30 hours of battery life, comfortable ear cushions, and intuitive touch controls, these headphones are perfect for travel, work, or relaxation.",
-      targetContent:
-        "Immerse yourself in sound with our deluxe wireless headphones. Equipped with noise-cancelling technology to eliminate background noise and enhance your listening experience. Enjoy up to 28 hours of playback time, soft cushioned ear pads for extended comfort, and easy-to-use touch controls. Ideal for commuting, office use, or enjoying music at home.",
-      similarityScore: 92,
-    },
-    {
-      element: "Price",
-      sourceContent: "$299.99",
-      targetContent: "$249.95",
-      similarityScore: 45,
-    },
-    {
-      element: "Features",
-      sourceContent:
-        "• Active Noise Cancellation\n• 30-hour battery life\n• Bluetooth 5.0\n• Voice assistant compatible\n• Foldable design\n• Carrying case included\n• Quick charge (5 min = 1 hour playback)",
-      targetContent:
-        "• Noise Cancellation Technology\n• 28-hour battery life\n• Bluetooth 5.0 connectivity\n• Voice assistant support\n• Compact folding design\n• Premium travel case\n• Fast charging capability",
-      similarityScore: 78,
-    },
-    {
-      element: "Variants",
-      sourceContent: "Available in Black, Silver, Blue",
-      targetContent: "Available in Black, White, Rose Gold",
-      similarityScore: 33,
-    },
-    {
-      element: "Warranty",
-      sourceContent: "2-year limited warranty covering manufacturing defects",
-      targetContent: "18-month warranty on all parts and labor",
-      similarityScore: 65,
-    },
-  ]
-}
-
