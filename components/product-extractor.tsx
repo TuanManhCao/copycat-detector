@@ -3,13 +3,20 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { ProductInfo } from '@/lib/types';
 
+type InputMode = 'markdown' | 'url';
+
 export function ProductExtractor() {
+  const [inputMode, setInputMode] = useState<InputMode>('markdown');
   const [markdown, setMarkdown] = useState('');
+  const [url, setUrl] = useState('');
   const [result, setResult] = useState<ProductInfo | null>(null);
+  const [rawMarkdown, setRawMarkdown] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
@@ -17,25 +24,33 @@ export function ProductExtractor() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!markdown) {
+    if (inputMode === 'markdown' && !markdown) {
       setError('Please enter markdown text');
+      return;
+    }
+    
+    if (inputMode === 'url' && !url) {
+      setError('Please enter a URL');
       return;
     }
     
     setIsLoading(true);
     setError(null);
     setResult(null);
+    setRawMarkdown(null);
     setProgress(10);
     
     try {
+      const payload = inputMode === 'markdown' 
+        ? { markdown } 
+        : { url };
+      
       const response = await fetch('/api/extract-product', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          markdown,
-        }),
+        body: JSON.stringify(payload),
       });
       
       setProgress(70);
@@ -50,6 +65,9 @@ export function ProductExtractor() {
       
       if (data.success) {
         setResult(data.data);
+        if (data.rawMarkdown) {
+          setRawMarkdown(data.rawMarkdown);
+        }
       } else {
         throw new Error(data.error || 'Failed to extract product information');
       }
@@ -66,20 +84,54 @@ export function ProductExtractor() {
       
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="space-y-2">
-          <Label htmlFor="markdown">Markdown Text</Label>
-          <Textarea
-            id="markdown"
-            placeholder="Paste your product markdown here..."
-            value={markdown}
-            onChange={(e) => setMarkdown(e.target.value)}
+          <Label>Input Method</Label>
+          <RadioGroup 
+            value={inputMode} 
+            onValueChange={(value: string) => setInputMode(value as InputMode)}
+            className="flex space-x-4"
             disabled={isLoading}
-            className="h-64"
-            required
-          />
+          >
+            <div className="flex items-center space-x-2">
+              <RadioGroupItem value="markdown" id="markdown-input" />
+              <Label htmlFor="markdown-input">Markdown Text</Label>
+            </div>
+            <div className="flex items-center space-x-2">
+              <RadioGroupItem value="url" id="url-input" />
+              <Label htmlFor="url-input">Product URL</Label>
+            </div>
+          </RadioGroup>
         </div>
         
+        {inputMode === 'markdown' ? (
+          <div className="space-y-2">
+            <Label htmlFor="markdown">Markdown Text</Label>
+            <Textarea
+              id="markdown"
+              placeholder="Paste your product markdown here..."
+              value={markdown}
+              onChange={(e) => setMarkdown(e.target.value)}
+              disabled={isLoading}
+              className="h-64"
+              required={inputMode === 'markdown'}
+            />
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <Label htmlFor="url">Product URL</Label>
+            <Input
+              id="url"
+              type="url"
+              placeholder="https://example.com/product"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              disabled={isLoading}
+              required={inputMode === 'url'}
+            />
+          </div>
+        )}
+        
         <Button type="submit" disabled={isLoading} className="w-full">
-          {isLoading ? 'Extracting...' : 'Extract Product Information'}
+          {isLoading ? 'Processing...' : 'Extract Product Information'}
         </Button>
       </form>
       
@@ -158,6 +210,17 @@ export function ProductExtractor() {
               className="h-64 font-mono text-sm"
             />
           </div>
+          
+          {rawMarkdown && (
+            <div className="space-y-2">
+              <div className="font-medium">Extracted Markdown</div>
+              <Textarea
+                value={rawMarkdown}
+                readOnly
+                className="h-64 font-mono text-sm"
+              />
+            </div>
+          )}
         </div>
       )}
     </div>
