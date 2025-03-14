@@ -30,3 +30,11 @@ export type ProductInfo = z.infer<typeof ProductInfoSchema>;
  * Product variant type
  */
 export type ProductVariant = z.infer<typeof ProductVariantSchema>; 
+
+// Calculate similarity scores for each feature using embeddings
+export type ComparisonItem = {
+  element: string
+  sourceContent: string
+  targetContent: string
+  similarityScore: number
+}

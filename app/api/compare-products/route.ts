@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { calculateArrayEmbeddingSimilarity, calculateEmbeddingSimilarity, calculateVariantsEmbeddingSimilarity, extractProductInfo } from '@/lib/ai-utils';
 import { scrapeUrl } from '@/lib/firecrawl';
+import { ComparisonItem } from '@/lib/types'
 
 // Request schema for product comparison
 const RequestSchema = z.object({
@@ -17,7 +18,7 @@ export async function POST(request: NextRequest) {
     const { sourceUrl, targetUrl } = RequestSchema.parse(body);
     
     // Scrape and extract product info from source URL
-    console.log(`Scraping source URL: ${sourceUrl}`);
+    // console.log(`Scraping source URL: ${sourceUrl}`);
     const [sourceResult, targetResult] = await Promise.all([
       scrapeUrl(sourceUrl, { formats: ['markdown'] }),
       scrapeUrl(targetUrl, { formats: ['markdown'] })
@@ -36,8 +37,9 @@ export async function POST(request: NextRequest) {
       extractProductInfo(targetMarkdown)
     ]);
     
-    // Calculate similarity scores for each feature using embeddings
-    const comparisonResult = await Promise.all([
+
+
+    const comparisonResult = await Promise.all<ComparisonItem>([
       {
         element: "Product Title",
         sourceContent: sourceProduct.productTitle,
@@ -106,6 +108,17 @@ export async function POST(request: NextRequest) {
     const overallScore = Math.round(
       comparisonResult.reduce((sum, item) => sum + item.similarityScore, 0) / comparisonResult.length
     );
+
+    console.log({
+      success: true,
+      sourceUrl,
+      targetUrl,
+      overallSimilarityScore: overallScore,
+      comparison: comparisonResult,
+      sourceProduct,
+      targetProduct,
+    });
+    
     
     return NextResponse.json({
       success: true,
