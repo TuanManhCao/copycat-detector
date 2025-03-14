@@ -91,8 +91,13 @@ export default function Home() {
       draw()
     }
 
-    setupMatrixRain(sourceCanvasRef, "#0099ff")
-    setupMatrixRain(targetCanvasRef, "#9900ff")
+    if (sourceCanvasRef.current) {
+      setupMatrixRain({ current: sourceCanvasRef.current }, "#0099ff")
+    }
+    
+    if (targetCanvasRef.current) {
+      setupMatrixRain({ current: targetCanvasRef.current }, "#9900ff") 
+    }
 
     // Cleanup
     return () => {

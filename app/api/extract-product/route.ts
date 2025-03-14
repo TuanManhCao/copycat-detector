@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { openai } from '@ai-sdk/openai';
-import { ProductInfoSchema } from '@/lib/types';
 import { extractProductInfo } from '@/lib/ai-utils'
 
 // Request schema
